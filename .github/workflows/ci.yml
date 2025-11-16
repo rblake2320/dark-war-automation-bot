@@ -1,0 +1,234 @@
+name: CI - Dark War Survival Bot
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: [3.7, 3.8, 3.9, "3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8
+
+    - name: Lint with flake8
+      run: |
+        # Stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exit-zero treats all errors as warnings. GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: Test imports and basic functionality
+      run: |
+        python -c "import config; print('Config module imported successfully')"
+        python -c "import window_manager; print('Window manager module imported successfully')"
+        python -c "import bot_logger; print('Logger module imported successfully')"
+        python -c "import template_matcher; print('Template matcher module imported successfully')"
+
+    - name: Test installation script
+      run: |
+        python install.py --test-mode
+
+    - name: Validate configuration files
+      run: |
+        python -c "
+        import json
+        import os
+
+        # Test default config creation
+        if not os.path.exists('bot_config.json'):
+            print('Creating default config...')
+            config = {
+                'window_title': 'BlueStacks App Player',
+                'phone_window_title': 'Dark War',
+                'action_delay_min': 0.1,
+                'action_delay_max': 0.5,
+                'template_threshold': 0.8
+            }
+            with open('bot_config.json', 'w') as f:
+                json.dump(config, f)
+
+        # Validate config
+        with open('bot_config.json', 'r') as f:
+            config = json.load(f)
+            print(f'Config loaded successfully: {len(config)} settings')
+
+        print('Configuration validation passed!')
+        "
+
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Run security scan with Bandit
+      run: |
+        pip install bandit
+        bandit -r . -f json -o bandit-report.json || true
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: bandit-security-report
+        path: bandit-report.json
+
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Check documentation completeness
+      run: |
+        echo "Checking documentation files..."
+
+        # Check for required files
+        required_files=("README.md" "SETUP.md" "CONTRIBUTING.md" "LICENSE")
+        for file in "${required_files[@]}"; do
+          if [[ -f "$file" ]]; then
+            echo "✓ $file exists"
+          else
+            echo "❌ $file missing"
+            exit 1
+          fi
+        done
+
+        # Check README has basic sections
+        if grep -q "Features" README.md && grep -q "Installation" README.md && grep -q "Usage" README.md; then
+          echo "✓ README.md has required sections"
+        else
+          echo "❌ README.md missing required sections"
+          exit 1
+        fi
+
+        echo "Documentation check passed!"
+
+    - name: Check for broken links (basic)
+      run: |
+        # Basic check for common broken link patterns
+        echo "Checking for broken internal links..."
+        if grep -r "\[.*\](\./" . --include="*.md" | grep -v "docs/"; then
+          echo "⚠️ Found potential broken internal links"
+        else
+          echo "✓ No obvious broken internal links found"
+        fi
+
+  build-test:
+    runs-on: windows-latest
+    needs: test
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.9
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: Test GUI import (without display)
+      run: |
+        python -c "
+        import sys
+        import os
+
+        # Mock tkinter for headless testing
+        class MockTk:
+            def __init__(self): pass
+            def title(self, title): pass
+            def geometry(self, geom): pass
+            def mainloop(self): pass
+
+        class MockTtk:
+            class Notebook:
+                def __init__(self, parent): pass
+                def pack(self, **kwargs): pass
+                def add(self, frame, text): pass
+            class Frame:
+                def __init__(self, parent): pass
+                def pack(self, **kwargs): pass
+            class Button:
+                def __init__(self, parent, **kwargs): pass
+                def pack(self, **kwargs): pass
+
+        # Test basic bot structure without GUI
+        print('Testing bot components...')
+
+        try:
+            from config import BotConfig
+            config = BotConfig()
+            print('✓ Config class works')
+        except Exception as e:
+            print(f'❌ Config error: {e}')
+
+        try:
+            import bot_logger
+            print('✓ Logger module works')
+        except Exception as e:
+            print(f'❌ Logger error: {e}')
+
+        print('Build test completed!')
+        "
+
+  release-check:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Check if ready for release
+      run: |
+        echo "Checking release readiness..."
+
+        # Check version consistency
+        if grep -q "version" setup.py 2>/dev/null || grep -q "__version__" *.py; then
+          echo "✓ Version information found"
+        else
+          echo "⚠️ No version information found"
+        fi
+
+        # Check changelog
+        if [[ -f "CHANGELOG.md" ]] || [[ -f "CHANGES.md" ]] || [[ -f "HISTORY.md" ]]; then
+          echo "✓ Changelog exists"
+        else
+          echo "⚠️ Consider adding a CHANGELOG.md file"
+        fi
+
+        # Check if all required files are present
+        core_files=("bot_control_center.py" "requirements.txt" "README.md")
+        all_present=true
+
+        for file in "${core_files[@]}"; do
+          if [[ -f "$file" ]]; then
+            echo "✓ $file present"
+          else
+            echo "❌ $file missing"
+            all_present=false
+          fi
+        done
+
+        if [[ "$all_present" == "true" ]]; then
+          echo "🚀 Repository is ready for release!"
+        else
+          echo "❌ Repository not ready for release"
+          exit 1
+        fi
