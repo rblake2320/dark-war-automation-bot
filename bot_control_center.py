@@ -31,6 +31,14 @@ except ImportError:
     BUILDING_MANAGER_AVAILABLE = False
     print("WARNING: Building manager not available. Smart building features disabled.")
 
+# Import the coordinate logger for precise building detection
+try:
+    from coordinate_logger import CoordinateLogger
+    COORDINATE_LOGGER_AVAILABLE = True
+except ImportError:
+    COORDINATE_LOGGER_AVAILABLE = False
+    print("WARNING: Coordinate logger not available. Coordinate-based building detection disabled.")
+
 # OCR libraries for building detection
 try:
     import cv2
@@ -49,13 +57,33 @@ except ImportError:
     print("Install with: pip install keyboard")
 
 # Version information
-__version__ = "2.1.0"
+__version__ = "2.3.0"
 __version_info__ = {
     "major": 2,
-    "minor": 1,
+    "minor": 3,
     "patch": 0,
-    "release_date": "2024-11-16",
+    "release_date": "2025-11-16",
     "changes": [
+        "Enhanced OCR accuracy with popup text filtering",
+        "Added multiple OCR configuration strategies for better number detection",
+        "Implemented cross-validation between full-screen and coordinate methods",
+        "Added Enhanced Scan button with automatic method selection",
+        "Improved warehouse level detection (fixes 15/16 vs 29 issue)",
+        "Enhanced text extraction with morphological image processing",
+        "Added validation system to detect popup contamination",
+        "Preserved all v2.2.0 coordinate features and v2.1.0 OCR features"
+    ],
+    "v2_2_changes": [
+        "Added Coordinate Setup tab for precise building detection",
+        "Implemented mouse click coordinate logging system with pynput",
+        "Created comprehensive building coordinate management interface",
+        "Added game view mode awareness (Shelter vs World View)",
+        "Integrated coordinate-based building targeting system",
+        "Enhanced building detection accuracy with coordinate logging",
+        "Added coordinate validation and testing functionality",
+        "Preserved all v2.1.0 OCR features and v2.0.0 core functionality"
+    ],
+    "v2_1_changes": [
         "Updated click speeds to phone-friendly range (2-20 seconds)",
         "Updated cycle speeds to realistic range (5-60 seconds)",
         "Added smart building management system with OCR detection",
@@ -125,6 +153,18 @@ class BotControlCenter:
             self.building_manager = None
             self.building_management_enabled = False
             self.ocr_status = {}
+
+        # Coordinate Logger System for precise building detection
+        if COORDINATE_LOGGER_AVAILABLE:
+            self.coordinate_logger = CoordinateLogger()
+            self.coordinate_setup_enabled = True
+            # Set callbacks for coordinate logging feedback
+            self.coordinate_logger.on_coordinate_logged = self.on_coordinate_logged
+            self.coordinate_logger.on_logging_started = self.on_coordinate_logging_started
+            self.coordinate_logger.on_logging_stopped = self.on_coordinate_logging_stopped
+        else:
+            self.coordinate_logger = None
+            self.coordinate_setup_enabled = False
 
         # Window management
         self.excluded_window_titles = [
@@ -462,6 +502,12 @@ class BotControlCenter:
             notebook.add(building_frame, text="Building Management")
             self.setup_building_management_tab(building_frame)
 
+        # Coordinate Setup Tab (v2.2.0)
+        if self.coordinate_setup_enabled:
+            coordinate_frame = ttk.Frame(notebook)
+            notebook.add(coordinate_frame, text="Coordinate Setup")
+            self.setup_coordinate_setup_tab(coordinate_frame)
+
     def setup_control_tab(self, parent):
         """Setup the main control tab"""
         # Mode Selection
@@ -648,10 +694,42 @@ class BotControlCenter:
 
         self.ocr_scan_button = ttk.Button(
             button_frame,
-            text="📷 Scan Buildings (OCR)",
+            text="📷 Scan Window",
             command=self.scan_buildings_ocr
         )
         self.ocr_scan_button.pack(side="left", padx=5)
+
+        # Coordinate-based scan button
+        self.coordinate_scan_button = ttk.Button(
+            button_frame,
+            text="📍 Scan Coordinates",
+            command=self.scan_buildings_coordinates
+        )
+        self.coordinate_scan_button.pack(side="left", padx=5)
+
+        self.clipboard_scan_button = ttk.Button(
+            button_frame,
+            text="📋 Scan Clipboard Image",
+            command=self.scan_clipboard_image
+        )
+        self.clipboard_scan_button.pack(side="left", padx=5)
+
+        # Enhanced scan button (uses all improvements)
+        self.enhanced_scan_button = ttk.Button(
+            button_frame,
+            text="🎯 Enhanced Scan",
+            command=self.scan_buildings_enhanced
+        )
+        self.enhanced_scan_button.pack(side="left", padx=5)
+
+        # LLM Strategic Tips button
+        self.strategic_tips_button = ttk.Button(
+            button_frame,
+            text="🤖 Strategic Tips",
+            command=self.get_strategic_tips
+        )
+        self.strategic_tips_button.pack(side="left", padx=5)
+
         ttk.Button(button_frame, text="🔄 Refresh List",
                   command=self.refresh_building_list).pack(side="left", padx=5)
         ttk.Button(button_frame, text="🗑️ Reset All",
@@ -706,6 +784,176 @@ class BotControlCenter:
         self.refresh_building_list()
         self.update_building_stats()
         self.update_ocr_controls()
+
+    def setup_coordinate_setup_tab(self, parent):
+        """Setup the Coordinate Setup tab for precise building detection"""
+        # Main container with scrollbar
+        main_canvas = tk.Canvas(parent)
+        scrollbar = ttk.Scrollbar(parent, orient="vertical", command=main_canvas.yview)
+        scrollable_frame = ttk.Frame(main_canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+        )
+
+        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        main_canvas.configure(yscrollcommand=scrollbar.set)
+
+        main_canvas.pack(side="left", fill="both", expand=True, padx=10, pady=10)
+        scrollbar.pack(side="right", fill="y")
+
+        # Instructions Section
+        instructions_frame = ttk.LabelFrame(scrollable_frame, text="📖 Setup Instructions")
+        instructions_frame.pack(fill="x", padx=5, pady=5)
+
+        instructions_text = """IMPORTANT: Before logging coordinates, make sure you are in SHELTER VIEW!
+
+1. Switch to Shelter View (not World map)
+2. Center your base view and ensure building names are visible
+3. Select target window and a building type to log
+4. Click on the building name/level text when prompted
+5. Repeat for all building types you want to automate
+
+⚠️ Warning: Coordinates logged in World View will not work!"""
+
+        instructions_label = tk.Label(instructions_frame, text=instructions_text,
+                                    justify="left", wraplength=400,
+                                    font=("TkDefaultFont", 9))
+        instructions_label.pack(padx=10, pady=10)
+
+        # Window Selection Section
+        window_frame = ttk.LabelFrame(scrollable_frame, text="🎯 Target Window Selection")
+        window_frame.pack(fill="x", padx=5, pady=5)
+
+        # Window dropdown
+        ttk.Label(window_frame, text="Select Target Window:").pack(anchor="w", padx=10, pady=5)
+        self.coord_window_var = tk.StringVar()
+        self.coord_window_combo = ttk.Combobox(window_frame, textvariable=self.coord_window_var,
+                                             state="readonly", width=40)
+        self.coord_window_combo.pack(padx=10, pady=5, fill="x")
+
+        # Window controls
+        window_buttons = ttk.Frame(window_frame)
+        window_buttons.pack(padx=10, pady=5, fill="x")
+
+        ttk.Button(window_buttons, text="Refresh Windows",
+                  command=self.refresh_coordinate_windows).pack(side="left", padx=5)
+        ttk.Button(window_buttons, text="Set Target Window",
+                  command=self.set_coordinate_target_window).pack(side="left", padx=5)
+
+        # Window status
+        self.coord_window_status = tk.StringVar(value="No window selected")
+        ttk.Label(window_frame, textvariable=self.coord_window_status,
+                 font=("TkDefaultFont", 9, "italic")).pack(padx=10, pady=5)
+
+        # Building Type Selection
+        building_frame = ttk.LabelFrame(scrollable_frame, text="🏗️ Building Type Selection")
+        building_frame.pack(fill="x", padx=5, pady=5)
+
+        # Building type dropdown
+        ttk.Label(building_frame, text="Select Building Type:").pack(anchor="w", padx=10, pady=5)
+        self.building_type_var = tk.StringVar()
+        self.building_type_combo = ttk.Combobox(building_frame, textvariable=self.building_type_var,
+                                              state="readonly", width=40)
+
+        # Populate with building types
+        building_types = [
+            ("hunter", "Hunter's Hut - Resource gathering building"),
+            ("kitchen", "Kitchen - Food production building"),
+            ("tower", "Tower/Watch Tower - Defense building"),
+            ("farm", "Farm - Food production building"),
+            ("warehouse", "Warehouse - Storage building"),
+            ("barracks", "Barracks - Military training"),
+            ("wall", "Wall - Defensive structure"),
+            ("mine", "Mine - Resource gathering"),
+            ("lumber", "Lumber Mill - Wood production"),
+            ("quarry", "Quarry - Stone production"),
+            ("forge", "Forge - Equipment crafting"),
+            ("academy", "Academy - Research building")
+        ]
+
+        self.building_type_combo['values'] = [f"{btype} - {desc}" for btype, desc in building_types]
+        self.building_type_combo.pack(padx=10, pady=5, fill="x")
+
+        # Coordinate Logging Section
+        logging_frame = ttk.LabelFrame(scrollable_frame, text="📍 Coordinate Logging")
+        logging_frame.pack(fill="x", padx=5, pady=5)
+
+        # Current logging status
+        self.coord_logging_status = tk.StringVar(value="Ready to log coordinates")
+        ttk.Label(logging_frame, textvariable=self.coord_logging_status,
+                 font=("TkDefaultFont", 10, "bold")).pack(padx=10, pady=5)
+
+        # Logging controls
+        logging_buttons = ttk.Frame(logging_frame)
+        logging_buttons.pack(padx=10, pady=5, fill="x")
+
+        self.start_logging_btn = ttk.Button(logging_buttons, text="Start Coordinate Logging",
+                                          command=self.start_coordinate_logging)
+        self.start_logging_btn.pack(side="left", padx=5)
+
+        self.stop_logging_btn = ttk.Button(logging_buttons, text="Stop Logging",
+                                         command=self.stop_coordinate_logging,
+                                         state="disabled")
+        self.stop_logging_btn.pack(side="left", padx=5)
+
+        # Logged Coordinates Section
+        coords_frame = ttk.LabelFrame(scrollable_frame, text="📋 Logged Coordinates")
+        coords_frame.pack(fill="both", expand=True, padx=5, pady=5)
+
+        # Coordinates tree view
+        coords_tree_frame = ttk.Frame(coords_frame)
+        coords_tree_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Tree view with columns
+        columns = ("building_type", "building_name", "coordinates", "timestamp")
+        self.coords_tree = ttk.Treeview(coords_tree_frame, columns=columns, show="headings", height=8)
+
+        # Define column headings
+        self.coords_tree.heading("building_type", text="Type")
+        self.coords_tree.heading("building_name", text="Building Name")
+        self.coords_tree.heading("coordinates", text="Coordinates (x, y)")
+        self.coords_tree.heading("timestamp", text="Timestamp")
+
+        # Define column widths
+        self.coords_tree.column("building_type", width=100)
+        self.coords_tree.column("building_name", width=150)
+        self.coords_tree.column("coordinates", width=120)
+        self.coords_tree.column("timestamp", width=150)
+
+        # Scrollbar for tree view
+        coords_scrollbar = ttk.Scrollbar(coords_tree_frame, orient="vertical", command=self.coords_tree.yview)
+        self.coords_tree.configure(yscrollcommand=coords_scrollbar.set)
+
+        self.coords_tree.pack(side="left", fill="both", expand=True)
+        coords_scrollbar.pack(side="right", fill="y")
+
+        # Coordinate management buttons
+        coords_buttons = ttk.Frame(coords_frame)
+        coords_buttons.pack(padx=10, pady=5, fill="x")
+
+        ttk.Button(coords_buttons, text="Refresh List",
+                  command=self.refresh_coordinates_list).pack(side="left", padx=5)
+        ttk.Button(coords_buttons, text="Delete Selected",
+                  command=self.delete_selected_coordinate).pack(side="left", padx=5)
+        ttk.Button(coords_buttons, text="Test Coordinate",
+                  command=self.test_selected_coordinate).pack(side="left", padx=5)
+        ttk.Button(coords_buttons, text="Export Coordinates",
+                  command=self.export_coordinates).pack(side="left", padx=5)
+
+        # Statistics Section
+        stats_frame = ttk.LabelFrame(scrollable_frame, text="📊 Coordinate Statistics")
+        stats_frame.pack(fill="x", padx=5, pady=5)
+
+        self.coord_stats_text = tk.Text(stats_frame, height=4, wrap="word",
+                                       font=("TkDefaultFont", 9))
+        self.coord_stats_text.pack(padx=10, pady=10, fill="x")
+
+        # Initialize the coordinate setup
+        self.refresh_coordinate_windows()
+        self.refresh_coordinates_list()
+        self.update_coordinate_statistics()
 
     def refresh_ocr_status(self):
         """Pull the latest OCR engine status from the manager"""
@@ -902,6 +1150,447 @@ class BotControlCenter:
         except Exception as e:
             self.log_error(e, "OCR Building Scan", "ocr_scan_buildings")
             messagebox.showerror("OCR Scan Error", f"Failed to scan buildings:\n{str(e)}")
+
+        finally:
+            self.update_ocr_controls()
+
+    def scan_buildings_coordinates(self):
+        """Scan buildings using logged coordinate positions"""
+        if not self.building_manager:
+            messagebox.showwarning("Coordinate Scan", "Building manager not available")
+            return
+
+        if not self.coordinate_setup_enabled:
+            messagebox.showwarning("Coordinate Scan", "Coordinate setup not available")
+            return
+
+        # Check if any coordinates have been logged
+        coord_status = self.building_manager.get_coordinate_status()
+        if not coord_status.get("available", False):
+            messagebox.showwarning("Coordinate Scan", "Coordinate logger not available")
+            return
+
+        if coord_status.get("total_coordinates", 0) == 0:
+            messagebox.showinfo(
+                "Coordinate Scan",
+                "No coordinates logged yet.\n\n"
+                "Go to the 'Coordinate Setup' tab to log building positions first."
+            )
+            return
+
+        try:
+            # Get target window
+            if not self.window_combo.get():
+                messagebox.showwarning(
+                    "Coordinate Scan",
+                    "No target window selected. Please select a game window first."
+                )
+                return
+
+            window_title = self.window_combo.get().split(" (")[0]
+
+            self.log(f"📍 Starting coordinate-based building scan on: {window_title}")
+            self.log(f"🎯 Using {coord_status['total_coordinates']} logged coordinates")
+
+            # Perform coordinate-based scan
+            scan_result = self.building_manager.scan_buildings_with_coordinates(window_title)
+
+            if scan_result["success"]:
+                detected_count = scan_result["total_detected"]
+                coordinates_used = scan_result.get("coordinates_used", 0)
+
+                self.log(f"📊 Coordinate scan completed: {detected_count}/{coordinates_used} buildings detected")
+
+                # Update building display
+                self.refresh_building_list()
+                self.update_building_stats()
+
+                # Show detailed results
+                building_details = []
+                for building_type, data in scan_result["detected_buildings"].items():
+                    level = data["current_level"]
+                    max_level = data["max_level"]
+                    maxed_status = "MAXED" if data["is_maxed"] else "not maxed"
+                    building_details.append(f"• {building_type}: Lv.{level}/{max_level} ({maxed_status})")
+
+                result_message = f"Coordinate scan results:\n\n"
+                result_message += f"Buildings detected: {detected_count}/{coordinates_used}\n\n"
+
+                if building_details:
+                    result_message += "Building levels:\n"
+                    result_message += "\n".join(building_details)
+                else:
+                    result_message += "No building levels detected."
+
+                if scan_result.get("scan_errors"):
+                    result_message += f"\n\nErrors:\n"
+                    for error in scan_result["scan_errors"][:5]:  # Show max 5 errors
+                        result_message += f"• {error}\n"
+
+                messagebox.showinfo("Coordinate Scan Complete", result_message)
+
+            else:
+                error_msg = scan_result.get("error", "Unknown error")
+                self.log(f"❌ Coordinate scan failed: {error_msg}")
+                messagebox.showerror("Coordinate Scan Failed", f"Scan failed: {error_msg}")
+
+        except Exception as e:
+            error_msg = f"Coordinate scan error: {e}"
+            self.log(f"❌ {error_msg}")
+            messagebox.showerror("Coordinate Scan Error", error_msg)
+
+    def scan_buildings_enhanced(self):
+        """Enhanced building scan using all accuracy improvements"""
+        if not self.building_manager:
+            messagebox.showwarning("Enhanced Scan", "Building manager not available")
+            return
+
+        try:
+            # Get target window
+            if not self.window_combo.get():
+                messagebox.showwarning(
+                    "Enhanced Scan",
+                    "No target window selected. Please select a game window first."
+                )
+                return
+
+            window_title = self.window_combo.get().split(" (")[0]
+
+            self.log(f"🎯 Starting enhanced building scan on: {window_title}")
+            self.log("🔧 Using popup filtering, coordinate targeting, and cross-validation")
+
+            # Use enhanced scanning method
+            scan_result = self.building_manager.scan_buildings_enhanced(None, window_title)
+
+            if scan_result["success"]:
+                detected_count = scan_result["total_detected"]
+                method_used = scan_result["method_used"]
+                accuracy_summary = scan_result.get("accuracy_summary", "Standard processing")
+
+                self.log(f"📊 Enhanced scan completed: {detected_count} buildings detected")
+                self.log(f"🔧 Method: {method_used}")
+                self.log(f"⚡ Improvements: {accuracy_summary}")
+
+                # Update building display
+                self.refresh_building_list()
+                self.update_building_stats()
+
+                # Show detailed results
+                building_details = []
+                validation_details = []
+
+                for building_type, data in scan_result["detected_buildings"].items():
+                    level = data["current_level"]
+                    max_level = data["max_level"]
+                    maxed_status = "MAXED" if data["is_maxed"] else "not maxed"
+                    confidence = data.get("confidence", 0.8)
+
+                    building_details.append(f"• {building_type}: Lv.{level}/{max_level} ({maxed_status}) [{confidence:.1%}]")
+
+                    # Add validation notes if available
+                    if "validation_notes" in data:
+                        for note in data["validation_notes"][:2]:  # Show max 2 notes per building
+                            validation_details.append(f"  → {building_type}: {note}")
+
+                result_message = f"Enhanced scan results:\n\n"
+                result_message += f"Buildings detected: {detected_count}\n"
+                result_message += f"Method: {method_used}\n"
+                result_message += f"Improvements: {accuracy_summary}\n\n"
+
+                if building_details:
+                    result_message += "Building levels:\n"
+                    result_message += "\n".join(building_details)
+
+                if validation_details:
+                    result_message += "\n\nValidation details:\n"
+                    result_message += "\n".join(validation_details[:5])  # Show max 5 validation notes
+
+                messagebox.showinfo("Enhanced Scan Complete", result_message)
+
+                # Log specific warehouse detection if present
+                if "warehouse" in scan_result["detected_buildings"]:
+                    warehouse_data = scan_result["detected_buildings"]["warehouse"]
+                    self.log(f"🏭 Warehouse detected: Level {warehouse_data['current_level']}/{warehouse_data['max_level']}")
+                    if "validation_notes" in warehouse_data:
+                        for note in warehouse_data["validation_notes"]:
+                            self.log(f"🔍 Warehouse validation: {note}")
+
+            else:
+                error_msg = scan_result.get("error", "Unknown error")
+                self.log(f"❌ Enhanced scan failed: {error_msg}")
+
+                # Show helpful error message based on the failure
+                if "No scanning method succeeded" in error_msg:
+                    messagebox.showerror(
+                        "Enhanced Scan Failed",
+                        "No scanning method succeeded.\n\n"
+                        "Suggestions:\n"
+                        "• Ensure game window is visible\n"
+                        "• Try logging coordinates in the Coordinate Setup tab\n"
+                        "• Check that building names/levels are visible on screen\n"
+                        "• Verify OCR is enabled in Building Management settings"
+                    )
+                else:
+                    messagebox.showerror("Enhanced Scan Failed", f"Scan failed: {error_msg}")
+
+        except Exception as e:
+            error_msg = f"Enhanced scan error: {e}"
+            self.log(f"❌ {error_msg}")
+            messagebox.showerror("Enhanced Scan Error", error_msg)
+
+    def get_strategic_tips(self):
+        """Get AI-powered strategic recommendations for the next hour"""
+        if not self.building_manager or not self.building_manager.llm_advisor:
+            messagebox.showwarning(
+                "Strategic Tips",
+                "LLM Strategic Advisor not available.\n\n"
+                "The LLM advisor requires:\n"
+                "• Ollama server running\n"
+                "• gemma3:latest model installed\n"
+                "• llm_advisor.py module"
+            )
+            return
+
+        try:
+            self.log("🤖 Generating strategic recommendations...")
+
+            # Gather current game state information
+            game_state = {
+                "timestamp": datetime.now().isoformat(),
+                "building_count": len(self.building_manager.building_states),
+                "last_scan": "recent" if self.building_manager.building_states else "none",
+                "llm_advisor_stats": self.building_manager.llm_advisor.get_performance_stats()
+            }
+
+            # Add building information if available
+            if self.building_manager.building_states:
+                buildings_ready = []
+                buildings_maxed = []
+                for building_type, data in self.building_manager.building_states.items():
+                    if data.get("is_maxed", False):
+                        buildings_maxed.append(building_type.title())
+                    else:
+                        level = data.get("current_level", "?")
+                        max_level = data.get("max_level", "?")
+                        buildings_ready.append(f"{building_type.title()}: {level}/{max_level}")
+
+                game_state["buildings_ready_to_upgrade"] = buildings_ready[:5]  # Top 5
+                game_state["buildings_maxed"] = len(buildings_maxed)
+
+            # Get strategic recommendations from LLM
+            tips = self.building_manager.llm_advisor.get_strategic_tips(game_state)
+
+            if tips and tips.strip():
+                # Display tips in a scrollable message box
+                tip_window = tk.Toplevel(self.root)
+                tip_window.title("🤖 Strategic Recommendations")
+                tip_window.geometry("600x400")
+                tip_window.resizable(True, True)
+
+                # Create scrollable text widget
+                frame = ttk.Frame(tip_window)
+                frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+                text_widget = tk.Text(frame, wrap="word", font=("Arial", 11))
+                scrollbar = ttk.Scrollbar(frame, orient="vertical", command=text_widget.yview)
+                text_widget.configure(yscrollcommand=scrollbar.set)
+
+                # Add content
+                text_widget.insert("1.0", f"Strategic Recommendations for Next Hour\n")
+                text_widget.insert("end", f"Generated: {datetime.now().strftime('%H:%M:%S')}\n")
+                text_widget.insert("end", "="*50 + "\n\n")
+                text_widget.insert("end", tips)
+
+                # Add performance stats
+                if game_state.get("llm_advisor_stats"):
+                    stats = game_state["llm_advisor_stats"]
+                    text_widget.insert("end", f"\n\n" + "="*50 + "\n")
+                    text_widget.insert("end", f"LLM Advisor Performance:\n")
+                    text_widget.insert("end", f"• Total queries: {stats['total_queries']}\n")
+                    text_widget.insert("end", f"• Average response time: {stats['avg_response_time']}\n")
+                    text_widget.insert("end", f"• Error rate: {stats['error_rate']}\n")
+
+                text_widget.configure(state="disabled")  # Make read-only
+
+                text_widget.pack(side="left", fill="both", expand=True)
+                scrollbar.pack(side="right", fill="y")
+
+                # Add close button
+                close_button = ttk.Button(tip_window, text="Close", command=tip_window.destroy)
+                close_button.pack(pady=5)
+
+                # Log the recommendations
+                self.log("🤖 Strategic recommendations generated and displayed")
+                self.log(f"📊 LLM stats: {stats['total_queries']} queries, {stats['avg_response_time']} avg time")
+
+            else:
+                self.log("⚠️ No strategic recommendations generated")
+                messagebox.showwarning(
+                    "Strategic Tips",
+                    "No strategic recommendations could be generated at this time.\n\n"
+                    "Try:\n"
+                    "• Running a building scan first\n"
+                    "• Checking Ollama server status\n"
+                    "• Verifying LLM model is loaded"
+                )
+
+        except Exception as e:
+            error_msg = f"Strategic tips error: {e}"
+            self.log(f"❌ {error_msg}")
+            messagebox.showerror("Strategic Tips Error", error_msg)
+
+    def scan_clipboard_image(self):
+        """Scan an image from clipboard for building levels using OCR"""
+        if not self.building_manager:
+            messagebox.showwarning("Clipboard OCR Scan", "Building manager not available")
+            return
+
+        self.building_manager.setup_ocr_engine()
+        self.update_ocr_controls()
+
+        status = self.ocr_status or {}
+        if not status.get("libraries_available", False):
+            install_msg = (
+                "OCR Python libraries are missing.\n"
+                "Install with: pip install pytesseract opencv-python pillow numpy"
+            )
+            self.log(f"❌ Clipboard OCR Scan blocked - {install_msg}")
+            messagebox.showwarning("Clipboard OCR Scan", install_msg)
+            return
+
+        if not status.get("tesseract_installed", False):
+            install_msg = (
+                "Tesseract OCR is not detected. Install it from "
+                "https://github.com/UB-Mannheim/tesseract/wiki and restart the bot."
+            )
+            details = status.get("last_error")
+            if details:
+                install_msg += f"\nDetails: {details}"
+            self.log(f"❌ Clipboard OCR Scan blocked - {install_msg}")
+            messagebox.showwarning("Clipboard OCR Scan", install_msg)
+            return
+
+        try:
+            # Get image from clipboard
+            try:
+                from PIL import ImageGrab
+                clipboard_image = ImageGrab.grabclipboard()
+
+                if clipboard_image is None:
+                    messagebox.showwarning(
+                        "Clipboard OCR Scan",
+                        "No image found in clipboard.\n\n"
+                        "Please copy an image first:\n"
+                        "1. Take a screenshot (Win+Shift+S)\n"
+                        "2. Copy game screenshot to clipboard\n"
+                        "3. Then click this button to scan"
+                    )
+                    return
+
+                # Convert PIL image to OpenCV format
+                clipboard_array = np.array(clipboard_image)
+
+                # Handle different image modes
+                if clipboard_image.mode == 'RGBA':
+                    clipboard_bgr = cv2.cvtColor(clipboard_array, cv2.COLOR_RGBA2BGR)
+                elif clipboard_image.mode == 'RGB':
+                    clipboard_bgr = cv2.cvtColor(clipboard_array, cv2.COLOR_RGB2BGR)
+                else:
+                    # Convert to RGB first, then to BGR
+                    rgb_image = clipboard_image.convert('RGB')
+                    clipboard_array = np.array(rgb_image)
+                    clipboard_bgr = cv2.cvtColor(clipboard_array, cv2.COLOR_RGB2BGR)
+
+                width, height = clipboard_image.size
+                self.log(f"📋 Scanning clipboard image: {width}x{height} pixels")
+
+            except ImportError:
+                messagebox.showerror(
+                    "Clipboard OCR Scan",
+                    "PIL ImageGrab not available. Install with: pip install Pillow"
+                )
+                return
+            except Exception as e:
+                messagebox.showerror(
+                    "Clipboard OCR Scan",
+                    f"Failed to get image from clipboard:\n{str(e)}"
+                )
+                return
+
+            # Run OCR scan on clipboard image
+            result = self.building_manager.scan_buildings_with_ocr(clipboard_bgr)
+
+            if result.get("success", False):
+                detected = result["detected_buildings"]
+                self.log(f"📋 Clipboard OCR Scan completed: {len(detected)} buildings analyzed")
+
+                maxed_count = sum(1 for b in detected.values() if b.get("is_maxed"))
+                if maxed_count > 0:
+                    self.log(f"   ✅ Found {maxed_count} maxed buildings")
+
+                # Show detailed results for clipboard scan
+                if detected:
+                    building_list = []
+                    for name, info in detected.items():
+                        level_str = f"{info.get('current_level', '?')}/{info.get('max_level', '?')}"
+                        maxed_str = " (MAXED)" if info.get('is_maxed') else ""
+                        building_list.append(f"• {name.title()}: Level {level_str}{maxed_str}")
+
+                    self.log("📋 Detected buildings:")
+                    for building in building_list:
+                        self.log(f"  {building}")
+
+                self.refresh_building_list()
+
+                summary = result.get("summary", {}) or {}
+                confidence = summary.get("confidence", {}) or {}
+                lines_detected = summary.get("lines_detected")
+                auto_marked = summary.get("auto_marked")
+
+                message_lines = [
+                    f"Clipboard image scanned successfully!",
+                    f"Found {len(detected)} buildings.",
+                    f"Auto-marked maxed buildings: {auto_marked or 0}",
+                ]
+
+                if lines_detected is not None:
+                    message_lines.append(f"OCR lines analyzed: {lines_detected}")
+
+                if confidence.get("mean_confidence") is not None:
+                    mean_conf = confidence["mean_confidence"]
+                    sample_size = confidence.get("sample_size")
+                    conf_line = f"Average confidence: {mean_conf}%"
+                    if sample_size:
+                        conf_line += f" (n={sample_size})"
+                    message_lines.append(conf_line)
+
+                if detected:
+                    message_lines.append("\nDetected buildings:")
+                    for name, info in detected.items():
+                        level_str = f"{info.get('current_level', '?')}/{info.get('max_level', '?')}"
+                        maxed_str = " (MAXED)" if info.get('is_maxed') else ""
+                        message_lines.append(f"• {name.title()}: Level {level_str}{maxed_str}")
+
+                messagebox.showinfo("Clipboard OCR Scan Complete", "\n".join(message_lines))
+            else:
+                error_msg = result.get("error", "Unknown error")
+                self.log(f"❌ Clipboard OCR Scan failed: {error_msg}")
+
+                suggestion_msg = (
+                    f"{error_msg}\n\n"
+                    "Suggestions:\n"
+                    "• Make sure the image shows Dark War Survival buildings\n"
+                    "• Ensure building names and levels are clearly visible\n"
+                    "• Try a higher resolution screenshot\n"
+                    "• Check that the image has good contrast"
+                )
+                messagebox.showerror("Clipboard OCR Scan Failed", suggestion_msg)
+
+            self.update_building_stats()
+
+        except Exception as e:
+            self.log_error(e, "Clipboard OCR Building Scan", "clipboard_ocr_scan_buildings")
+            messagebox.showerror("Clipboard OCR Scan Error", f"Failed to scan clipboard image:\n{str(e)}")
 
         finally:
             self.update_ocr_controls()
@@ -1780,6 +2469,241 @@ class BotControlCenter:
             self.log(f"📤 Errors exported to: {export_file.name}")
         except Exception as e:
             messagebox.showerror("Export Failed", f"Failed to export errors:\n{e}")
+
+    # Coordinate Setup Methods
+    def refresh_coordinate_windows(self):
+        """Refresh the list of available windows for coordinate logging"""
+        try:
+            windows = gw.getWindowsWithTitle("")  # Get all windows
+            window_list = []
+
+            for window in windows:
+                if (window.title and
+                    window.width > 100 and window.height > 100 and
+                    window.title not in self.excluded_window_titles):
+                    window_list.append(f"{window.title} ({window.width}x{window.height})")
+
+            self.coord_window_combo['values'] = window_list
+            if window_list and not self.coord_window_var.get():
+                self.coord_window_var.set(window_list[0])
+
+        except Exception as e:
+            self.log(f"❌ Error refreshing coordinate windows: {e}")
+
+    def set_coordinate_target_window(self):
+        """Set the target window for coordinate logging"""
+        selected = self.coord_window_var.get()
+        if not selected:
+            messagebox.showwarning("Window Selection", "Please select a window first")
+            return
+
+        try:
+            # Extract window title from selection
+            window_title = selected.split(" (")[0]
+
+            if self.coordinate_logger.set_target_window(window_title):
+                self.coord_window_status.set(f"✅ Target set: {window_title}")
+                self.log(f"🎯 Coordinate target window set: {window_title}")
+            else:
+                self.coord_window_status.set("❌ Failed to set target window")
+                self.log(f"❌ Failed to set coordinate target window: {window_title}")
+
+        except Exception as e:
+            self.log(f"❌ Error setting coordinate target window: {e}")
+            self.coord_window_status.set("❌ Error setting target window")
+
+    def start_coordinate_logging(self):
+        """Start coordinate logging for the selected building type"""
+        if not self.coordinate_logger:
+            messagebox.showerror("Error", "Coordinate logger not available")
+            return
+
+        # Get selected building type
+        building_selection = self.building_type_var.get()
+        if not building_selection:
+            messagebox.showwarning("Building Selection", "Please select a building type first")
+            return
+
+        building_type = building_selection.split(" - ")[0]
+        building_name = building_selection.split(" - ")[1] if " - " in building_selection else building_type
+
+        # Check if target window is set
+        if not self.coordinate_logger.target_window:
+            messagebox.showwarning("Window Required", "Please set a target window first")
+            return
+
+        # Start logging
+        if self.coordinate_logger.start_logging_building(building_type, building_name):
+            self.coord_logging_status.set(f"🖱️ Click on the {building_name} building...")
+            self.start_logging_btn.config(state="disabled")
+            self.stop_logging_btn.config(state="normal")
+            self.log(f"📍 Started coordinate logging for {building_name}")
+
+            # Show instruction messagebox
+            messagebox.showinfo("Coordinate Logging Started",
+                              f"Click on the {building_name} building in the game window.\n\n"
+                              f"Make sure you are in SHELTER VIEW (not World map)!\n\n"
+                              f"Click directly on the building name/level text.")
+        else:
+            messagebox.showerror("Error", f"Failed to start coordinate logging for {building_name}")
+
+    def stop_coordinate_logging(self):
+        """Stop coordinate logging"""
+        if self.coordinate_logger:
+            self.coordinate_logger.stop_logging()
+
+    def on_coordinate_logging_started(self, building_type, building_name):
+        """Callback when coordinate logging starts"""
+        self.log(f"🖱️ Coordinate logging started for {building_name}")
+
+    def on_coordinate_logging_stopped(self):
+        """Callback when coordinate logging stops"""
+        self.coord_logging_status.set("Ready to log coordinates")
+        self.start_logging_btn.config(state="normal")
+        self.stop_logging_btn.config(state="disabled")
+        self.log("📍 Coordinate logging stopped")
+
+    def on_coordinate_logged(self, coordinate_id, coordinate_entry):
+        """Callback when a coordinate is successfully logged"""
+        building_name = coordinate_entry['building_name']
+        x = coordinate_entry['absolute']['x']
+        y = coordinate_entry['absolute']['y']
+
+        self.log(f"✅ Coordinate logged for {building_name}: ({x}, {y})")
+        self.coord_logging_status.set(f"✅ Logged: {building_name} at ({x}, {y})")
+
+        # Refresh the coordinates list
+        self.refresh_coordinates_list()
+        self.update_coordinate_statistics()
+
+        # Show success message
+        messagebox.showinfo("Coordinate Logged",
+                          f"Successfully logged coordinate for {building_name}!\n\n"
+                          f"Position: ({x}, {y})\n"
+                          f"ID: {coordinate_id}")
+
+    def refresh_coordinates_list(self):
+        """Refresh the coordinates list in the tree view"""
+        if not self.coordinate_logger:
+            return
+
+        try:
+            # Clear existing items
+            for item in self.coords_tree.get_children():
+                self.coords_tree.delete(item)
+
+            # Add coordinates to tree
+            for coord_id, coord_data in self.coordinate_logger.coordinates.items():
+                building_type = coord_data['building_type']
+                building_name = coord_data['building_name']
+                x = coord_data['absolute']['x']
+                y = coord_data['absolute']['y']
+                timestamp = coord_data['timestamp'][:19]  # Remove microseconds
+
+                self.coords_tree.insert("", "end", iid=coord_id, values=(
+                    building_type, building_name, f"({x}, {y})", timestamp
+                ))
+
+        except Exception as e:
+            self.log(f"❌ Error refreshing coordinates list: {e}")
+
+    def delete_selected_coordinate(self):
+        """Delete the selected coordinate"""
+        selected_items = self.coords_tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Selection Required", "Please select a coordinate to delete")
+            return
+
+        if messagebox.askyesno("Delete Coordinate", "Delete the selected coordinate?"):
+            for item_id in selected_items:
+                if self.coordinate_logger.delete_coordinate(item_id):
+                    self.coords_tree.delete(item_id)
+                    self.log(f"🗑️ Deleted coordinate: {item_id}")
+
+            self.update_coordinate_statistics()
+
+    def test_selected_coordinate(self):
+        """Test the selected coordinate by taking a screenshot of that region"""
+        selected_items = self.coords_tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Selection Required", "Please select a coordinate to test")
+            return
+
+        try:
+            # Get the first selected coordinate
+            coord_id = selected_items[0]
+            coord_data = self.coordinate_logger.coordinates[coord_id]
+
+            building_name = coord_data['building_name']
+            x = coord_data['absolute']['x']
+            y = coord_data['absolute']['y']
+
+            # Test the coordinate by clicking it (or just showing where it would click)
+            self.log(f"🧪 Testing coordinate for {building_name} at ({x}, {y})")
+
+            # For now, just show the coordinate info
+            messagebox.showinfo("Coordinate Test",
+                              f"Coordinate Test Results:\n\n"
+                              f"Building: {building_name}\n"
+                              f"Position: ({x}, {y})\n"
+                              f"Coordinate ID: {coord_id}\n\n"
+                              f"This would click at the logged position in the game.")
+
+        except Exception as e:
+            self.log(f"❌ Error testing coordinate: {e}")
+            messagebox.showerror("Test Failed", f"Failed to test coordinate: {e}")
+
+    def export_coordinates(self):
+        """Export coordinates to a JSON file"""
+        if not self.coordinate_logger or not self.coordinate_logger.coordinates:
+            messagebox.showwarning("No Coordinates", "No coordinates to export")
+            return
+
+        try:
+            from tkinter import filedialog
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="Export Coordinates"
+            )
+
+            if filename:
+                # Save coordinates to the selected file
+                import shutil
+                shutil.copy2(self.coordinate_logger.coordinates_file, filename)
+                messagebox.showinfo("Export Complete", f"Coordinates exported to:\n{filename}")
+                self.log(f"📤 Coordinates exported to: {filename}")
+
+        except Exception as e:
+            messagebox.showerror("Export Failed", f"Failed to export coordinates: {e}")
+
+    def update_coordinate_statistics(self):
+        """Update the coordinate statistics display"""
+        if not self.coordinate_logger:
+            return
+
+        try:
+            stats = self.coordinate_logger.get_coordinate_statistics()
+
+            stats_text = f"Total Coordinates: {stats['total_coordinates']}\n"
+
+            if stats['building_types']:
+                stats_text += "Building Types:\n"
+                for building_type, count in stats['building_types'].items():
+                    stats_text += f"  • {building_type}: {count}\n"
+
+            if stats['window_coverage']:
+                coverage = stats['window_coverage']
+                stats_text += f"Window Coverage: X({coverage.get('x_range', 'N/A')}) Y({coverage.get('y_range', 'N/A')})\n"
+
+            if stats['last_updated']:
+                stats_text += f"Last Updated: {stats['last_updated'][:19]}"
+
+            self.coord_stats_text.delete(1.0, tk.END)
+            self.coord_stats_text.insert(1.0, stats_text)
+
+        except Exception as e:
+            self.log(f"❌ Error updating coordinate statistics: {e}")
 
     def run(self):
         """Start the GUI"""

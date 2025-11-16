@@ -7,3 +7,5 @@ keyboard>=0.13.0
 colorama>=0.4.4
 psutil>=5.8.0
 pytesseract>=0.3.10
+pynput>=1.7.6
+ollama>=0.1.0
