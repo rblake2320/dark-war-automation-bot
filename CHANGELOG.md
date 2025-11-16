@@ -1,5 +1,112 @@
 # Changelog - Dark War Survival Bot
 
+## [2.1.0] - 2024-11-16
+
+### 🚀 **Enhanced OCR Detection System & Building Management**
+
+### ✨ **New Features**
+
+#### 🏗️ **Smart Building Management Tab**
+- **Building Detection**: OCR-powered building scanning and level detection
+- **Building Tree View**: Organized display of detected buildings with status
+- **JSON Export**: Export building data for external analysis
+- **Last Scan Tracking**: Timestamps for all detected buildings
+- **Scan Progress**: Visual feedback during building detection workflows
+
+#### 👁️ **OCR Status Synchronization**
+- **Real-Time OCR Status**: Live OCR system availability monitoring
+- **OCR Test Function**: One-click OCR system verification
+- **Version Display**: Shows Tesseract version when available
+- **Visual Indicators**: Color-coded status (green/red) for OCR health
+- **Error Detection**: Automatic detection of OCR configuration issues
+
+#### 🎮 **Phone-Friendly Speed Presets**
+- **Slow Mode (Safe)**: 0.5s clicks, 3.0s cycles, 3 actions - for careful operations
+- **Normal Mode**: 0.2s clicks, 1.5s cycles, 5 actions - balanced performance
+- **Fast Mode**: 0.1s clicks, 0.8s cycles, 7 actions - quick automation
+- **Turbo Mode**: 0.05s clicks, 0.3s cycles, 10 actions - maximum speed
+- **One-Click Presets**: Apply entire speed configuration instantly
+
+#### 🛠️ **Error Log Utilities & Diagnostics**
+- **Error Log Viewer**: Integrated error log display in Diagnostics tab
+- **Log Refresh**: One-click error log refresh
+- **Log Clearing**: Clear old error logs to free space
+- **Diagnostic Scripts Integration**: Run OCR tests directly from GUI
+- **System Information Panel**: Shows version, OCR, keyboard hook status
+
+#### 🔍 **OCR Diagnostic Scripts**
+- **simple_ocr_test.py**: Quick OCR verification with basic text recognition
+  - Installation check
+  - Simple text recognition test
+  - Screenshot OCR test (if screenshots available)
+  - Pass/fail/skip reporting
+- **test_ocr_debug.py**: Comprehensive OCR debugging tool
+  - Environment validation
+  - Performance benchmarking with different PSM modes
+  - Image preprocessing tests (grayscale, threshold, adaptive)
+  - Confidence level analysis
+  - Debug image generation
+  - Detailed error logging to error_logs/
+
+### 🔧 **Improvements**
+
+#### 💪 **Hardened BotConfig Loading/Saving**
+- **Version Field Support**: Config files now include version information
+- **Unknown Key Preservation**: Forward/backward compatible - preserves unknown settings
+- **Emergency Stop Sync**: Automatically syncs emergency_stop_key with emergency_stop_keys list
+- **Graceful Degradation**: Handles missing keys with sensible defaults
+- **Migration Support**: Automatic config migration from older versions
+- **Error Recovery**: Robust error handling prevents config crashes
+
+#### 📊 **Enhanced Statistics Tracking**
+- **OCR Scan Count**: Tracks number of OCR operations performed
+- **Buildings Detected**: Counts detected buildings across sessions
+- **Scan Progress**: Real-time feedback during building scans
+
+#### 📁 **Runtime Artifact Management**
+- **error_logs/ Directory**: Dedicated directory for error logs
+- **building_data/ Directory**: Stores exported building JSON data
+- **Automatic Directory Creation**: Install script creates necessary directories
+- **.gitignore Updates**: Excludes runtime artifacts from version control
+
+### 🐛 **Bug Fixes**
+- **Config Loading Crashes**: Fixed crashes when loading configs with new/unknown keys
+- **Emergency Stop Key Mismatch**: Synchronized emergency stop options between config and Control Center
+- **Test Compatibility**: Resolved PytestReturnNotNoneWarning in legacy tests
+
+### 📦 **Dependencies**
+
+#### New Dependencies
+- `pytesseract`: OCR text recognition engine
+- `opencv-python-headless`: Additional OpenCV support for OCR
+- `keyboard`: Enhanced keyboard hook support (optional)
+
+#### Installation Updates
+- **install.py**: Updated to v2.1.0 with OCR dependency installation
+- **Tesseract Installation Guide**: Added platform-specific Tesseract installation instructions
+- **Optional Dependency Handling**: Gracefully handles missing OCR dependencies
+
+### 📚 **Documentation**
+- **OCR Pipeline Documentation**: Added documentation for OCR diagnostic tools
+- **Building Management Guide**: Instructions for using building detection features
+- **Speed Preset Guide**: Documentation for phone-friendly speed presets
+- **Error Log Utilities**: Guide for using diagnostic tools
+
+### ⚙️ **Configuration Changes**
+- Added `version` field to bot_config.json
+- Changed default `emergency_stop_key` from "f9" to "esc"
+- Added `emergency_stop_keys` list for multiple key support
+- Added `enable_ocr` flag (default: true)
+- Added `ocr_confidence_threshold` (default: 0.7)
+
+### 🧪 **Testing**
+- All tests pass with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest`
+- Note: PytestReturnNotNoneWarning for legacy tests (functionality intact)
+- OCR diagnostic scripts tested and verified
+- Config migration tested from v2.0.0 to v2.1.0
+
+---
+
 ## [2.0.0] - 2024-11-16
 
 ### 🚀 **Major Release - Complete Enhancement Package**

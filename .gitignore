@@ -98,6 +98,10 @@ after_*.png
 before_*.png
 click_*.png
 
+# Runtime artifacts (v2.1.0+)
+error_logs/
+building_data/
+
 # Config files (keep template)
 bot_config.json
 
