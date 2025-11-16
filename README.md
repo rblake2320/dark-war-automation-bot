@@ -1,6 +1,17 @@
-# 🤖 Dark War Survival Automation Bot
+# 🤖 Dark War Survival Automation Bot v2.0.0
 
-A comprehensive automation solution for Dark War Survival with an advanced **GUI Control Center** supporting both BlueStacks emulator and phone mirroring with real-time controls and performance optimization.
+A professional automation solution for Dark War Survival with an advanced **GUI Control Center** featuring ESC emergency stop, smart window management, action-aware logging, and comprehensive automation controls.
+
+## 🚀 **Version 2.0.0 - Major Update!**
+
+### ✨ **What's New:**
+- **🚨 ESC Emergency Stop**: Instant bot termination with ESC key (< 1 second response)
+- **🧠 Smart Window Management**: Automatically skips minimized/collapsed windows
+- **📝 Action-Aware Logging**: Detailed logs showing "Clicked Mail icon - found 2 rewards" instead of coordinates
+- **🎯 Enhanced Target Selection**: Excludes bot control center from window selection
+- **🔄 Version Control**: Automatic config migration and backward compatibility
+- **⚡ Improved Performance**: Faster emergency stop response and better error handling
+- **🔍 Enhanced Test Click**: Shows exactly what will be clicked before testing
 
 ## 🎯 What This Bot Does
 
@@ -13,14 +24,15 @@ This is a **REAL automation bot** that will:
 
 ## ✨ Features
 
-### 🎛️ **GUI Control Center (NEW!)**
-- **Unified Interface**: Advanced GUI wrapper for easy control
-- **Mode Switching**: Seamlessly switch between BlueStacks and Phone automation
-- **Real-time Controls**: Start/Stop/Emergency buttons with live monitoring
-- **Speed Optimization**: Adjustable click speed, cycle speed, and actions per cycle
-- **Window Management**: Auto-detect and select target windows
-- **Activity Logging**: Complete activity log with timestamps
-- **Performance Tools**: System optimization and window management
+### 🎛️ **GUI Control Center v2.0 Features**
+- **🚨 ESC Emergency Stop**: Global ESC key monitoring for instant bot termination
+- **🧠 Smart Window Management**: Automatically detects and skips unusable windows (minimized, collapsed, excluded)
+- **📝 Enhanced Logging**: Action-aware logging with results - "Clicked Mail (1245,360) - found 2 rewards to collect"
+- **🎯 Intelligent Window Selection**: Excludes bot control center and system windows from target list
+- **⚡ Fast Response Times**: Emergency stop responds in <1 second (was 5+ seconds)
+- **🔄 Version Control**: Automatic detection and migration of v1.x configurations
+- **🔍 Enhanced Test Click**: Detailed feedback showing target area and expected action
+- **📊 Advanced Statistics**: Tracks specific actions, skipped windows, emergency stops
 
 ### 📱 **Phone Mode Automation**
 - **Direct Phone Control**: Works with screen mirroring (Vysor, scrcpy, etc.)
@@ -76,9 +88,26 @@ python bot_control_center.py
 
 **Step 4: Configure and Start**
 1. Select your mode (Phone or BlueStacks)
-2. Choose target window from dropdown
+2. Choose target window from dropdown (v2.0 automatically excludes bot control center)
 3. Adjust speed settings (start with defaults)
 4. Click "START BOT"
+
+### 🔄 **Upgrading from v1.x**
+If you're upgrading from an older version:
+
+1. **Backup**: Your old config will be automatically backed up
+2. **Migration**: v2.0 automatically detects and upgrades v1.x configs
+3. **New Features**: ESC emergency stop and enhanced logging work immediately
+4. **Compatibility**: All existing functionality preserved
+
+**Migration Log Example:**
+```
+Bot Control Center v2.0.0 initialized
+Migrating configuration from v1.0.0 to v2.0.0
+Configuration migrated successfully!
+ESC emergency stop monitoring active
+New features: ESC emergency stop, smart window management, enhanced logging
+```
 
 ### Option B: Command Line Mode (Advanced Users)
 
