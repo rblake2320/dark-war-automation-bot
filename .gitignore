@@ -87,6 +87,8 @@ dmypy.json
 
 # Bot-specific files
 logs/
+error_logs/
+building_data/
 *.log
 screenshots/
 debug_*.png
