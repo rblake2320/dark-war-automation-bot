@@ -18,6 +18,7 @@ Version 2.3.0 Features:
 import json
 import logging
 import os
+import re
 import shutil
 import sys
 from datetime import datetime
