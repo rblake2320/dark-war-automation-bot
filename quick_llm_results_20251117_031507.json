@@ -1,0 +1,29 @@
+{
+  "test_type": "quick_performance_comparison",
+  "timestamp": "20251117_031507",
+  "results": {
+    "gemma3:latest": {
+      "success": true,
+      "response_time": 15.844825267791748,
+      "speed_score": "ACCEPTABLE",
+      "json_valid": false,
+      "choice_correct": false,
+      "response_length": 436,
+      "response_text": "Here's the breakdown and the chosen answer:\n\n*   **Problem:** Storage full, food production wasted. This is a critical situation \u2013 wasted food means s..."
+    },
+    "deepseek-r1:32b": {
+      "success": false,
+      "error": "TIMEOUT",
+      "response_time": 45
+    },
+    "llama3.1:70b": {
+      "success": true,
+      "response_time": 16.827083587646484,
+      "speed_score": "ACCEPTABLE",
+      "json_valid": true,
+      "choice_correct": true,
+      "response_length": 83,
+      "response_text": "{\"choice\": \"A\", \"speed_reason\": \"Free up space to utilize excess food production.\"}"
+    }
+  }
+}

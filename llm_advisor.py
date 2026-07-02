@@ -448,6 +448,265 @@ class LLMAdvisor:
         # Fallback: upgrade if resources available
         return True, "Resources available (fallback decision)"
 
+    def validate_action_goal(self, action_goal: str, current_game_state: Dict[str, Any]) -> Tuple[bool, str, float]:
+        """
+        Validate whether an action's goal makes strategic sense in current game state.
+
+        This provides intelligent validation for the action system, ensuring every action
+        has meaningful purpose rather than being mindless clicking.
+
+        Args:
+            action_goal: The goal statement from a GameAction
+            current_game_state: Current resources, buildings, events, etc.
+
+        Returns:
+            Tuple of (is_valid, reasoning, confidence_score)
+        """
+        if not self.enabled:
+            return True, "LLM validation disabled", 0.5
+
+        self.stats['strategic_queries'] += 1
+
+        system_context = """You are a strategic validator for Dark War Survival actions.
+        Analyze whether an action's goal makes sense given the current game state.
+
+        Consider:
+        1. Resource efficiency and availability
+        2. Strategic timing and prioritization
+        3. Event-driven needs (alliance wars, events)
+        4. Long-term vs short-term benefits
+        5. Opportunity cost of this action vs alternatives
+
+        Respond with JSON only:
+        {
+            "valid": true/false,
+            "reasoning": "detailed explanation of why this goal is/isn't strategic",
+            "confidence": 0.0-1.0,
+            "suggested_alternative": "alternative action if goal is invalid"
+        }"""
+
+        resources = current_game_state.get('current_resources', {})
+        events = current_game_state.get('active_events', [])
+        buildings = current_game_state.get('visible_buildings', [])
+
+        prompt = f"""
+        ACTION GOAL VALIDATION:
+
+        Proposed action goal: "{action_goal}"
+
+        Current game state:
+        - Resources: {json.dumps(resources, indent=2)}
+        - Active events: {events}
+        - Ready buildings: {len(buildings)} buildings ready for upgrade
+        - Time: {datetime.now().strftime('%A %H:%M')}
+
+        Is this action goal strategically sound right now?
+        Should the bot execute this action or focus on something else?
+        """
+
+        llm_response = self._query_llm(prompt, system_context)
+
+        if llm_response:
+            try:
+                result = json.loads(llm_response.strip())
+                is_valid = result.get('valid', True)
+                reasoning = result.get('reasoning', 'LLM analysis')
+                confidence = result.get('confidence', 0.5)
+
+                logger.debug(f"Action goal validation: {is_valid} ({confidence:.1f}) - {reasoning}")
+                return is_valid, reasoning, confidence
+
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse action validation response")
+
+        # Fallback: assume valid
+        return True, "Validation unavailable (fallback)", 0.5
+
+    def suggest_next_action(self, current_game_state: Dict[str, Any],
+                           last_action_result: Optional[Dict] = None) -> Tuple[Optional[str], str, Dict]:
+        """
+        Suggest the next intelligent action based on current game state.
+
+        This transforms the bot from random clicking to strategic action planning.
+
+        Args:
+            current_game_state: Current resources, buildings, events, etc.
+            last_action_result: Result from the previous action (if any)
+
+        Returns:
+            Tuple of (action_type, reasoning, action_parameters)
+        """
+        if not self.enabled:
+            return None, "LLM suggestions disabled", {}
+
+        self.stats['strategic_queries'] += 1
+
+        system_context = """You are a strategic action planner for Dark War Survival.
+        Analyze the current game state and recommend the next most important action.
+
+        Available action types:
+        - "collect_rewards": Collect mail/rewards for resources
+        - "upgrade_building": Upgrade a specific building
+        - "gather_resources": Focus on resource gathering
+        - "train_troops": Build military units
+        - "wait": No action needed right now
+
+        Consider strategic priorities:
+        1. Resource collection when low on resources
+        2. Defensive preparations before alliance wars
+        3. Resource production optimization during peaceful times
+        4. Cost-efficient upgrades when appropriate
+        5. Event-specific preparations
+
+        Respond with JSON only:
+        {
+            "action_type": "action_name",
+            "reasoning": "why this action is most important now",
+            "priority": "critical|high|medium|low",
+            "parameters": {
+                "target_resource_increase": 50000000,
+                "building_name": "Warehouse",
+                "target_level": 30
+            }
+        }"""
+
+        resources = current_game_state.get('current_resources', {})
+        events = current_game_state.get('active_events', [])
+        buildings = current_game_state.get('visible_buildings', [])
+
+        # Include last action context if available
+        last_action_context = ""
+        if last_action_result:
+            last_action_context = f"""
+        Last action completed:
+        - Action: {last_action_result.get('action_name', 'Unknown')}
+        - Success: {last_action_result.get('success', False)}
+        - Goal achieved: {last_action_result.get('goal_achieved', 'Unknown')}
+        - Resources changed: {last_action_result.get('resources_changed', {})}
+        """
+
+        total_resources = sum(resources.values()) if resources else 0
+        ready_buildings = [b for b in buildings if 'ready' in str(b).lower()]
+
+        prompt = f"""
+        STRATEGIC ACTION PLANNING:
+
+        Current game state:
+        - Total resources: {total_resources:,}
+        - Resource breakdown: {json.dumps(resources, indent=2)}
+        - Active events: {events if events else 'None'}
+        - Ready buildings: {len(ready_buildings)} buildings ready
+        - Time: {datetime.now().strftime('%A %H:%M')}
+        {last_action_context}
+
+        What should the bot do NEXT for maximum strategic benefit?
+        Focus on the single most important action right now.
+        """
+
+        llm_response = self._query_llm(prompt, system_context)
+
+        if llm_response:
+            try:
+                result = json.loads(llm_response.strip())
+                action_type = result.get('action_type')
+                reasoning = result.get('reasoning', 'LLM strategic recommendation')
+                parameters = result.get('parameters', {})
+
+                logger.info(f"LLM suggests next action: {action_type} - {reasoning}")
+                return action_type, reasoning, parameters
+
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse action suggestion response")
+
+        # Fallback: suggest reward collection if low resources, otherwise wait
+        if total_resources < 100000000:  # 100M threshold
+            return "collect_rewards", "Low resources detected (fallback)", {"target_resource_increase": 50000000}
+        else:
+            return "wait", "No urgent actions needed (fallback)", {}
+
+    def analyze_action_outcome(self, action_goal: str, expected_benefit: str,
+                              actual_result: Dict, game_state_before: Dict,
+                              game_state_after: Dict) -> Tuple[float, str, List[str]]:
+        """
+        Analyze whether an action achieved its intended strategic purpose.
+
+        This provides intelligent outcome analysis beyond simple success/failure.
+
+        Args:
+            action_goal: Original goal of the action
+            expected_benefit: What benefit was expected
+            actual_result: ActionResult from execution
+            game_state_before: Game state before action
+            game_state_after: Game state after action
+
+        Returns:
+            Tuple of (strategic_success_score, analysis, improvement_suggestions)
+        """
+        if not self.enabled:
+            return 0.7, "LLM analysis disabled", []
+
+        self.stats['strategic_queries'] += 1
+
+        system_context = """You are an action outcome analyzer for Dark War Survival.
+        Evaluate whether an action achieved its strategic purpose and provide insights.
+
+        Consider:
+        1. Did the action achieve its stated goal?
+        2. Were the benefits worth the cost/time?
+        3. Did this action advance overall strategy?
+        4. What could be improved next time?
+        5. Strategic positioning after the action
+
+        Respond with JSON only:
+        {
+            "strategic_success": 0.0-1.0,
+            "analysis": "detailed analysis of strategic outcome",
+            "improvements": ["suggestion1", "suggestion2"],
+            "next_recommended": "what to focus on next"
+        }"""
+
+        resource_changes = actual_result.get('resources_changed', {})
+        execution_success = actual_result.get('success', False)
+
+        prompt = f"""
+        ACTION OUTCOME ANALYSIS:
+
+        Action goal: "{action_goal}"
+        Expected benefit: "{expected_benefit}"
+
+        Execution result:
+        - Success: {execution_success}
+        - Execution time: {actual_result.get('execution_time', 0):.1f}s
+        - Resource changes: {json.dumps(resource_changes, indent=2)}
+        - Outcome: {actual_result.get('outcome_description', 'Unknown')}
+
+        Game state changes:
+        - Resources before: {json.dumps(game_state_before.get('current_resources', {}), indent=2)}
+        - Resources after: {json.dumps(game_state_after.get('current_resources', {}), indent=2)}
+
+        Did this action fulfill its strategic purpose?
+        How well did it advance our overall game strategy?
+        """
+
+        llm_response = self._query_llm(prompt, system_context)
+
+        if llm_response:
+            try:
+                result = json.loads(llm_response.strip())
+                strategic_score = result.get('strategic_success', 0.7)
+                analysis = result.get('analysis', 'LLM strategic analysis')
+                improvements = result.get('improvements', [])
+
+                logger.debug(f"Action strategic analysis: {strategic_score:.1f} - {analysis}")
+                return strategic_score, analysis, improvements
+
+            except json.JSONDecodeError:
+                logger.warning("Failed to parse outcome analysis response")
+
+        # Fallback analysis
+        fallback_score = 0.8 if execution_success else 0.3
+        return fallback_score, "Strategic analysis unavailable (fallback)", []
+
     def get_performance_stats(self) -> Dict[str, Any]:
         """Get LLM advisor performance statistics."""
         total_queries = self.stats['ocr_corrections'] + self.stats['strategic_queries']
