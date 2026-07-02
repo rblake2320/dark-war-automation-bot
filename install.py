@@ -42,7 +42,8 @@ def install_dependencies():
         "pygetwindow",
         "pillow",
         "numpy",
-        "psutil"
+        "psutil",
+        "pytesseract"
     ]
 
     print("\n[INFO] Installing dependencies...")
@@ -115,6 +116,7 @@ def test_installation():
         import PIL
         import numpy
         import psutil
+        import pytesseract
         print("[SUCCESS] All dependencies imported successfully")
         return True
     except ImportError as e:
