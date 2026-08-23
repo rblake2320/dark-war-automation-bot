@@ -8,7 +8,7 @@ Read-only live audit. No hero, formation, training, research, speedup, reward, o
 | --- | --- | --- |
 | Resources | 1.2G wood, 400.2M secondary resource shown at base; 52,916 gems | Preserve gems and all speedups until a scored, planned push. |
 | Construction | Warehouse Lv.16 → Lv.17 is active; about 6h 48m remained during the prior verified session | Finish normally. Do not apply speedups after the fact. |
-| Research | Research Center had an active timer of about 58d 14h in the prior verified session | Keep active; read the exact technology before any next research decision. |
+| Research | Active queue: about 58d 13h remaining; second research queue visibly **Idle** | Do not disturb the active queue. Fill the idle queue in the 08:00 Age of Science window after reading the eligible technology/cost. |
 | Hero roster | Numerous Lv.95 heroes plus a secondary Lv.70 layer; Training Center is a hero reset screen | Never reset without an explicit recovery plan. |
 | Troop 1 | Francis, Tristan, Guy, Lan, Catherine & Rex; 93.5–93.7M power; 9,808/9,808 capacity; No.1 | Formation 1. Default target for scarce combat investment. |
 | Troop 2 | Marshall, Evans, Natasha, Kyle, Megan; 77.43M power; 9,596/9,596 capacity; No.2 | Maintain only when a gate, event, or formation role requires it. |
@@ -32,6 +32,20 @@ Read-only live audit. No hero, formation, training, research, speedup, reward, o
 | 12:00 | Arms Expert | Best window for planned troop training/promotion; do not use speedups before queue/troop-tier review. |
 | 16:00 | Shelter Expansion | Best window for planned construction starts and construction speedups after buffs are stacked. |
 | 20:00 | Hero Initiative | Same policy as 00:00. |
+
+## Research landscape
+
+| Tree | Visible completion | Decision |
+| --- | --- | --- |
+| Develop | 96% | Finish only when it advances an immediate efficiency/gate objective. |
+| Economy | MAX | No further spend. |
+| Battle | 55% | Secondary to Battle Strategy/Joint Operations and Troop 1 faction needs. |
+| Duel | MAX | Correctly completed; preserve the Alliance Duel reward advantage. |
+| Battle Strategy | 48% | High-priority candidate for the idle research queue, subject to eligible node/cost. |
+| Joint Operations | 10% | High-priority long-term candidate; compare immediate power/cost against Battle Strategy at 08:00. |
+| Fighter Training | 16% | Only priority if Troop 1's faction and next troop gate confirm it. |
+| Shooter Training | 21% | Only priority if Troop 1's faction and next troop gate confirm it. |
+| Rider Training | 22% | Only priority if Troop 1's faction and next troop gate confirm it. |
 
 ## Immediate strategy
 
